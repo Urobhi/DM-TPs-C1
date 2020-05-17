@@ -1,0 +1,2 @@
+# Ignoramos todos los datasets para evitar problemas de carga al repo
+*.gz
