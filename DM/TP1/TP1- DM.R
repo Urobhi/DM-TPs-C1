@@ -1,18 +1,22 @@
 library(mongolite)
 library(ggplot2)
+library(tidyverse)
+library(dplyr)
 
+#Conexiones de mongo #####
+tweets <- mongo(collection = "tweets_mongo_covid19", db = "DMUBA")
+users <- mongo(collection = "users_mongo_covid19", db = "DMUBA")
 
 #### Ejemplo de la clase #####
  
-tweets <- mongo(collection = "tweets_mongo_covid19", db = "DMUBA")
-df_source = tweets$aggregate('[{ "$group": {"_id": "$source", "total": { "$sum": 1} } },
+df_source_agreggate = tweets$aggregate('[{ "$group": {"_id": "$source", "total": { "$sum": 1} } },
                                { "$sort": { "total" : -1}}
                              ]')
 
 
-names(df_source) <- c("source", "count")
+names(df_source_agreggate) <- c("source", "count")
 
-ggplot(data=head(df_source, 10), aes(x=reorder(source, -count), y=count)) +
+ggplot(data=head(df_source_agreggate, 10), aes(x=reorder(source, -count), y=count)) +
   geom_bar(stat="identity", fill="steelblue") +
   xlab("Source") + ylab("Cantidad de tweets") +
   labs(title = "Cantidad de tweets en los principales clientes")
@@ -28,15 +32,18 @@ boxplot(log10(df_users$friends_count  + 1)~verified,data=df_users, main="Cantida
         ylab="Log de cantidad de amigos", xlab="Verified Account") 
 
 
-#### Listado de puntos para tener en cuenta####
+
 #### Analisis exploratorio ####
-users <- mongo(collection = "users_mongo_covid19", db = "DMUBA")
-df_users = users$find(query = '{}', 
-                      fields = '{"description" : true,"account_created_at" :true ,"location" : true,"friends_count" : true, "listed_count" : true, "statuses_count": true, "favourites_count":true, "verified": true }')
+
+df_users <- users$find(limit = 100000, skip = 0, fields = '{  }')  # Como es pequeño y no tiene profundidad, importo todo
+
+
+# Cuantos usuarios son verificados?
+table(df_users$verified)  # Muy pocos usuarios son verificados
 
 top10_locations =sort(table(df_users$location),decreasing=TRUE)[1:10]   # Como podemos tocar las locations para sumarizar?
 top10_locations =sort(table(df_users$location[df_users$verified]),decreasing=TRUE)   # Como podemos tocar las locations para sumarizar?
-table(df_users$verified)  # Muy pocos usuarios son verificados
+
 
 boxplot(log10(df_users$friends_count  + 1)~verified,data=df_users, main="Cantidad de amigos en cuentas verified vs no verified",
         ylab="Log de cantidad de amigos", xlab="Verified Account") 
@@ -48,12 +55,40 @@ boxplot(log10(df_users$favourites_count  + 1)~verified,data=df_users, main="Cant
         ylab="Log de cantidad de amigos", xlab="Verified Account") 
 
   
-
+# Me quedo con las variables numericas para detectar correlaciones
 df_users_num <- df_users[colnames(df_users[unlist(lapply(df_users, is.numeric))])]
-
-cor(df_users_num[df_users$verified,])  # No parece haber grandes correlaciones entre los count. Tanto para verificados como para no 
+cor(df_users_num)  
+cor(df_users_num[df_users$verified,])            # Hay correlación entre followers y listas publicas que sigue el usuario
 cor(df_users_num[-df_users$verified,])
-# Integracion de datos
+
+
+# Paso a explorar los tweets 
+df_tweets <- tweets$find(limit = 100000, skip = 0, fields = '{  }')   # mas campos y con profundidad, vamos a necesitar mas detalle
+
+boxplot(df_tweets$retweet_count ~verified,data=df_tweets, main="Cantidad de retweets en cuentas verified vs no verified",
+        ylab="Log de cantidad de retweets", xlab="Verified Account") 
+
+# Filtro por tweets con las siguientes palabras
+with_covid_words = dplyr::filter(df_tweets,grepl('COVID|Coronavirus|COVID-19|19|COVID_19', ignore.case = TRUE,text))
+with_cuarentena_words = dplyr::filter(df_tweets,grepl('Cuarentena|Encierro', ignore.case = TRUE,text))
+
+
+# cantidad de nulos por característica??
+df_users.na <- sapply(df_users,function(x) sum(is.na(x)))
+
+ #Integracion de datos######
+ 
+Integrated_df = inner_join(df_tweets,df_users,by=c("user_id" = "user_id"))   # el inner join me da completo, todos los tweets tienen datos
+Integrated_df_num <- df_users[colnames(df_users[unlist(lapply(df_users, is.numeric))])]
+cor(df_users_num)  
+
+# Puedo hacer un join entre tweets y users --> Ver si estan correspondidos, para eso hago un inner join y veo cuandos elementos tengo
+
+
+# Eliminacion de columnas redundandtes
+
+
+
 # Reduccion de datos y dimensiones
 # Limpieza de Datos
 # Analisis de outliers
