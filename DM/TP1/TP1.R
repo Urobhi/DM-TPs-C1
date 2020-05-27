@@ -3,9 +3,7 @@ library(ggplot2)
 library(tidyverse)
 library(dplyr)
 library(readxl)
-library(purrr)
-library(data.table)
-library(jsonlite)
+library(sqldf)
 
 
 
@@ -14,7 +12,8 @@ library(jsonlite)
 tweets <- mongo(collection = "tweets_mongo_covid19", db = "DMUBA")
 users <- mongo(collection = "users_mongo_covid19", db = "DMUBA")
 df_users <- users$find(limit = 100000, skip = 0, fields = '{  }')  # Como es pequeño y no tiene profundidad, importo todo
-df_tweets <- tweets$find(limit = 100000, skip = 0, fields = '{  }')   # mas campos y con profundidad, vamos a necesitar mas detalle
+df_tweets <- tweets$find(limit = 100000, skip = 0, fields = '{  }') 
+df_tweets %>% mutate(created_at = as.Date(created_at))
 
 #Csvs
 Parent_folder <- (dirname(rstudioapi::getSourceEditorContext()$path))   # levanto la carpeta madre ( me independizo de la estructura de cada uno)
@@ -96,14 +95,10 @@ Features_repetidos <- Integrated_df[,sort(grep('.x|.y',colnames(Integrated_df), 
 
 
 # Here is the same thing in a single pipeline
+unnested_hashtags <- unnest(as.data.table(select(df_tweets,created_at,user_id,hashtags)), cols = hashtags) %>%
+  na.omit
+asd <-sort(table(unnested_hashtags$hashtags),decreasing = TRUE)[1:10]   # HAshtags mas repetidos
 
-dt2 <- readLines("https://files.pushshift.io/reddit/comments/sample_data.json") %>%
-  map(fromJSON) %>%
-  map(as.data.table) %>%
-  rbindlist(fill = TRUE)
-
-
-unchop(c(df_tweets$`_id`,df_tweets$hashtags))
 
 
 
