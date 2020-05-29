@@ -13,7 +13,8 @@ tweets <- mongo(collection = "tweets_mongo_covid19", db = "DMUBA")
 users <- mongo(collection = "users_mongo_covid19", db = "DMUBA")
 df_users <- users$find(limit = 100000, skip = 0, fields = '{  }')  # Como es pequeño y no tiene profundidad, importo todo
 df_tweets <- tweets$find(limit = 100000, skip = 0, fields = '{  }')  %>% 
-mutate(created_at = as.Date(created_at)) # Casteo a
+             select(-c('lang','protected','country','country_code','place_url','place_name','place_full_name','place_type','lat','lng','symbols',)) %>% # Elimino columnas que no aportan por muchos NA
+             mutate(created_at = as.Date(created_at))  # Casteo a
 
 #Csvs
 Parent_folder <- (dirname(rstudioapi::getSourceEditorContext()$path))   # levanto la carpeta madre ( me independizo de la estructura de cada uno)
@@ -94,27 +95,27 @@ Features_repetidos <- Integrated_df[,sort(grep('.x|.y',colnames(Integrated_df), 
 # Data Frame con estadísticas de Hashtags
 
 
-# Here is the same thing in a single pipeline
-unnested_hashtags <- unnest((select(df_tweets,created_at,user_id,hashtags)), cols = hashtags) %>% na.omit
+#Tratamiento de Hashtags       ##### 
+unnested_hashtags <- unnest((select(df_tweets,created_at,user_id,hashtags)), cols = hashtags) %>% 
+                     na.omit
 
-#asd <-sort(table(unnested_hashtags$hashtags),decreasing = TRUE)[1:10]   # HAshtags mas repetidos
-Unique_users_byHashtags <- aggregate(data=unnested_hashtags, u_id ~ hashtags, function(x) length(unique(x)))%>%
+Unique_users_byHashtags <- aggregate(data=unnested_hashtags, user_id ~ hashtags, function(x) length(unique(x)))%>%
                            arrange(desc(user_id)) %>%
                            setNames(c('hashtags','unique_user_count'))# Hashtags con mayores usuarios unicos
 Users_byHashtags <- aggregate(data=unnested_hashtags, user_id ~ hashtags, function(x) length(x))%>%
                     arrange(desc(user_id)) %>% # Hashtags con mayores usuarios unicos
                     setNames(c('hashtags','user_count'))
-
-mean(agg$user_id/agg2$user_id) # Relación entre únicos y totales muy cercana a uno, los tuits generalmente son de un usuario.
-
 Hashtags_count <- unnested_hashtags %>% 
                   select(hashtags) %>%
-                  table
-Hashtags_time  <- aggregate(data=unnested_hashtags, user_count ~ created_at + hashtags, function(x) length(x))%>% 
+                  table %>%
+                  data.frame %>%
+                  setNames(c('hashtags','count'))
+                  
+Hashtags_time  <- aggregate(data=unnested_hashtags, user_id ~ created_at + hashtags, function(x) length(x))%>% 
                   arrange(desc(created_at),desc(user_id)) 
 Hashtags_Mean_PerDay <- Hashtags_time %>%
                         group_by(hashtags)%>%
-                        summarise_at(vars(user_id),list(Mean = mean)) %>% sort
+                        summarise_at(vars(user_id),list(Mean = mean))
 
 Hashtags_min_date <- Hashtags_time %>% 
                      select(hashtags,created_at) %>%
@@ -123,9 +124,11 @@ Hashtags_min_date <- Hashtags_time %>%
                      slice(1) %>%  # takes the first occurrence if there is a tie
                      setNames(c('hashtags','Min_date'))
   
-Hashtags_info <- left_join(Hashtags_min_date, Hashtags_Mean_PerDay, by='hashtags')
-                 left_join(., Unique_users_byHashtags, by='hashtags') %>%
-                 left_join(.,Users_byHashtags, by ='hashtags')
+Hashtags_info <- inner_join(Hashtags_count, Unique_users_byHashtags, by='hashtags') %>%
+                 inner_join(., Users_byHashtags, by='hashtags') %>%
+                 inner_join(.,Hashtags_Mean_PerDay, by ='hashtags') %>%
+                 inner_join(.,Hashtags_min_date, by ='hashtags') 
+                 
   
   
 
