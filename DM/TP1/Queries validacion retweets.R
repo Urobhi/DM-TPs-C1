@@ -28,34 +28,27 @@ sqldf("select sum(case when r2.status_id is null then 1 end) as no_match,
 #no_match: 20911 
 #match: 375
 
-###Query para validar si los que sí se pueden cruzar efectivanebte se trata del mismo tweet
-retweet_sample <- sqldf("select r1.retweet_status_id, r2.status_id, r1.text, r2.text, r1.retweet_user_id, r2.user_id
-      from df_retweets r1
-      join df_retweets r2 on r1.retweet_status_id = r2.status_id
-      where r1.is_retweet = TRUE")
-
-View(retweet_sample)
-##output -> efectivamente los retweets que cruzar con un tweet poseen el mismo texto y usuario original
 
 ###Query para generar artificalmente el count de retweets basado en los que tenemos en la base
 #adicionalmente tambien agregue el max retweet_retweet_cout que viene como dato
 #El output es el status_id del tweet y el nuevo campo así es fácil de anexar a la fuente original
 #Donde no se trate de un retweet, deja el campo en NA
 
-sqldf("select o.status_id, g.count_retweets_sample, rr.max_retweet_retweet_sample
+ret_data <- sqldf("select o.status_id, g.retweet_count_sample, rr.max_retweet_count_sample
       from df_retweets o
       left join (
-            select r1.retweet_status_id, count(*) as count_retweets_sample
+            select r1.retweet_status_id, count(*) as retweet_count_sample
             from df_retweets r1
             where r1.is_retweet = TRUE
             group by r1.retweet_status_id
       ) g on o.retweet_status_id = g.retweet_status_id or o.status_id = g.retweet_status_id
       left join (
-            select retweet_status_id, max(retweet_retweet_count) max_retweet_retweet_sample
+            select retweet_status_id, max(retweet_retweet_count) max_retweet_count_sample
             from df_retweets r1
             where r1.is_retweet = TRUE
             group by r1.retweet_status_id
       ) rr on o.retweet_status_id = rr.retweet_status_id or o.status_id = rr.retweet_status_id ")
+
 
 
 ####------------------------------------QUOTES
@@ -94,6 +87,8 @@ sqldf("select is_retweet,
       group by is_retweet
       ")
 
+sqldf("select status_id from df_quotes where is_quote = true and is_retweet = false limit 5")
+
 #output -> un quote puede no ser un retweet
 # Quotes que no son retweets: 1789
 # Quotes que son retweets: 3416
@@ -105,16 +100,16 @@ sqldf("select is_retweet,
 #El output es el status_id del tweet y el nuevo campo así es fácil de anexar a la fuente original
 #Donde no se trate de un retweet, deja el campo en NA
 
-sqldf("select source.status_id, sample_quotes.count_quotes_sample, max_quote.max_quoted_retweet_sample
+quote_data <- sqldf("select source.status_id, sample_quotes.quote_count_sample, max_quote.max_quote_sample
       from df_quotes source
       left join (
-      select quoted_status_id, count(*) as count_quotes_sample
+      select quoted_status_id, count(*) as quote_count_sample 
       from df_quotes 
       where is_quote = TRUE
       group by quoted_status_id
       ) sample_quotes on source.quoted_status_id = sample_quotes.quoted_status_id or source.status_id = sample_quotes.quoted_status_id
       left join (
-      select quoted_status_id, max(quoted_retweet_count) max_quoted_retweet_sample
+      select quoted_status_id, max(quoted_retweet_count) max_quote_sample
       from df_quotes
       where is_quote = TRUE
       group by quoted_status_id
