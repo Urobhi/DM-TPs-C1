@@ -11,7 +11,8 @@ library(sqldf)
 # Mongo
 tweets <- mongo(collection = "tweets_mongo_covid19", db = "DMUBA")
 users <- mongo(collection = "users_mongo_covid19", db = "DMUBA")
-df_users <- users$find(limit = 100000, skip = 0, fields = '{  }')  # Como es pequeño y no tiene profundidad, importo todo
+df_users <- users$find(limit = 100000, skip = 0, fields = '{  }') %>%
+            write.csv(paste(Parent_folder,"/Datasets/Users.csv",sep = ''),row.names = FALSE)# Como es pequeño y no tiene profundidad, importo todo
 df_tweets <- tweets$find(limit = 100000, skip = 0, fields = '{  }')  %>% 
              select(-c('lang','protected','country','country_code','place_url','place_name','place_full_name','place_type','lat','lng','symbols',)) %>% # Elimino columnas que no aportan por muchos NA
              mutate(created_at = as.Date(created_at))  # Casteo a
@@ -87,12 +88,21 @@ df_users.na <- sapply(df_users,function(x) sum(is.na(x)))
 
  #Integracion de datos######
 
+# Agregacion de datos de COVID (Geografico no me sirve)
+
+COVID_Data_aggregate <- COVID_geographic  %>%
+                        select (dateRep,cases,deaths) %>%
+                        arrange((dateRep)) %>%
+                        group_by(dateRep) %>%
+                        summarise(cases = sum(cases), deaths= sum(deaths)) %>%
+                        write.csv(paste(Parent_folder,"/Datasets/COVID_World_aggregated.csv",sep = ''), row.names = FALSE)
+      
+
 # Puedo hacer un join entre tweets y users --> Ver si estan correspondidos, para eso hago un inner join y veo cuandos elementos tengo 
 Integrated_df = inner_join(df_tweets,df_users,by=c("user_id" = "user_id"))   # el inner join me da completo, todos los tweets tienen datos
 Integrated_df_num <- Integrated_df[colnames(Integrated_df[unlist(lapply(Integrated_df, is.numeric))])]
 Features_repetidos <- Integrated_df[,sort(grep('.x|.y',colnames(Integrated_df), value= TRUE))]  # Vemos que las features estan repetidas, no hay nada nuevo entre los twitts y los usuarios
 
-# Data Frame con estadísticas de Hashtags
 
 
 #Tratamiento de Hashtags       ##### 
@@ -112,7 +122,10 @@ Hashtags_count <- unnested_hashtags %>%
                   setNames(c('hashtags','count'))
                   
 Hashtags_time  <- aggregate(data=unnested_hashtags, user_id ~ created_at + hashtags, function(x) length(x))%>% 
-                  arrange(desc(created_at),desc(user_id)) 
+                  arrange(desc(created_at),desc(user_id)) %>%
+                  write.csv(paste(Parent_folder,"/Datasets/Hashtags_OverTime.csv",sep = ''),row.names = FALSE)
+
+
 Hashtags_Mean_PerDay <- Hashtags_time %>%
                         group_by(hashtags)%>%
                         summarise_at(vars(user_id),list(Mean = mean))
@@ -123,11 +136,18 @@ Hashtags_min_date <- Hashtags_time %>%
                      filter(created_at == min(created_at)) %>% 
                      slice(1) %>%  # takes the first occurrence if there is a tie
                      setNames(c('hashtags','Min_date'))
-  
+
+len_time_window <- as.numeric(max(unique(Hashtags_time$created_at)) -min(unique(Hashtags_time$created_at)),units = "days")  
+Hashtags_mean_alldays  <- Hashtags_time %>%
+                         group_by(hashtags)%>%
+                         summarise(mean_timeWindow = sum(user_id)/len_time_window)
+
 Hashtags_info <- inner_join(Hashtags_count, Unique_users_byHashtags, by='hashtags') %>%
                  inner_join(., Users_byHashtags, by='hashtags') %>%
                  inner_join(.,Hashtags_Mean_PerDay, by ='hashtags') %>%
-                 inner_join(.,Hashtags_min_date, by ='hashtags') 
+                 inner_join(.,Hashtags_min_date, by ='hashtags') %>%
+                 inner_join(.,Hashtags_mean_alldays,by = 'hashtags') %>%
+                 write.csv(paste(Parent_folder,"/Datasets/Hashtags_info.csv",sep = ''),row.names = FALSE)  
                  
   
   
